@@ -9,8 +9,9 @@
 
 package net.minecraft.src.buildcraft.factory;
 
+import java.lang.reflect.Field;
+import java.util.HashSet;
 import java.util.LinkedList;
-
 import net.minecraft.src.Container;
 import net.minecraft.src.CraftingManager;
 import net.minecraft.src.EntityPlayer;
@@ -24,6 +25,7 @@ import net.minecraft.src.buildcraft.api.Orientations;
 import net.minecraft.src.buildcraft.api.Position;
 import net.minecraft.src.buildcraft.core.StackUtil;
 import net.minecraft.src.buildcraft.core.Utils;
+import net.minecraft.src.forge.ForgeHooks;
 
 public class TileAutoWorkbench extends TileEntity implements ISpecialInventory {
 
@@ -174,6 +176,9 @@ public class TileAutoWorkbench extends TileEntity implements ISpecialInventory {
 
 		return recipe;
 	}
+	
+	private HashSet mCraftSet = null;
+	private boolean mRPExists = true;
 
 	public ItemStack extractItem(boolean doRemove, boolean removeRecipe) {
 		InventoryCrafting craftMatrix = new LocalInventoryCrafting();
@@ -181,12 +186,31 @@ public class TileAutoWorkbench extends TileEntity implements ISpecialInventory {
 		LinkedList<StackPointer> pointerList = new LinkedList<StackPointer>();
 
 		int itemsToLeave = (removeRecipe ? 0 : 1);
+		
+		if (mRPExists && mCraftSet == null) {
+			System.out.println("CraftLib: " + CraftLib.class.getName());
+			try {
+				Class craftLibClass = Class.forName("eloraam.core.CraftLib");
+				Field damageOnCraftField = craftLibClass.getField("damageOnCraft");
+				mCraftSet = (HashSet) damageOnCraftField.get(null);
+			} catch (Exception e) {
+				mRPExists = false;
+			}
+		}
 
 		for (int i = 0; i < getSizeInventory(); ++i) {
 			ItemStack stack = getStackInSlot(i);
 
 			if (stack != null) {
-				if (stack.stackSize <= itemsToLeave) {
+				if (mCraftSet != null && mCraftSet.contains(stack.itemID)) {
+					stack.stackSize = stack.stackSize <= 1 ? 0 : stack.stackSize - (removeRecipe?2:1);
+					ForgeHooks.onTakenFromCrafting((EntityPlayer)worldObj.playerEntities.get(0), stack, this);
+					StackPointer pointer = new StackPointer();
+					pointer.inventory = this;
+					pointer.item = stack.copy();
+					pointer.index = i;
+					stack = pointer.item;
+				} else if (stack.stackSize <= itemsToLeave) {
 					StackPointer pointer = getNearbyItem(stack.itemID, stack.getItemDamage());
 
 					if (pointer == null) {
