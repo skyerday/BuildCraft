@@ -67,12 +67,14 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 
 	BptBuilderBase bluePrintBuilder;
 
-	public @TileNetworkData
-	PowerProvider powerProvider;
+	public @TileNetworkData PowerProvider powerProvider;
 
 	public static int MAX_ENERGY = 7000;
+	
+	NBTTagCompound armStore = null;
 
 	public TileQuarry() {
+		
 		powerProvider = PowerFramework.currentFramework.createPowerProvider();
 		powerProvider.configure(20, 25, 25, 25, MAX_ENERGY);
 	}
@@ -84,6 +86,7 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 		}
 
 		if (bluePrintBuilder == null) {
+			
 			if (!box.isInitialized()) {
 				setBoundaries(loadDefaultBoundaries);
 			}
@@ -92,8 +95,18 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 		}
 
 		if (builderDone) {
+			
 			box.deleteLasers();
+			
+			if (armStore != null){
+				arm = new EntityMechanicalArm(worldObj);
+				arm.readFromNBT(armStore);
+				arm.listener = this;
 
+				loadArm = true;
+				armStore = null;
+			}
+			
 			if (arm == null) {
 				createArm();
 			}
@@ -106,7 +119,9 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 					isDigging = true;
 				}
 			}
+			
 		} else {
+			
 			box.createLasers(worldObj, LaserKind.Stripes);
 			isDigging = true;
 		}
@@ -115,9 +130,10 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 	private boolean loadDefaultBoundaries = false;
 
 	private void createArm() {
-		arm = new EntityMechanicalArm(worldObj, box.xMin + Utils.pipeMaxPos,
-				yCoord + bluePrintBuilder.bluePrint.sizeY - 1
-						+ Utils.pipeMinPos, box.zMin + Utils.pipeMaxPos,
+		
+		arm = new EntityMechanicalArm(worldObj,
+				box.xMin + Utils.pipeMaxPos,
+				yCoord + bluePrintBuilder.bluePrint.sizeY - 1 + Utils.pipeMinPos, box.zMin + Utils.pipeMaxPos,
 				bluePrintBuilder.bluePrint.sizeX - 2 + Utils.pipeMinPos * 2,
 				bluePrintBuilder.bluePrint.sizeZ - 2 + Utils.pipeMinPos * 2, this);
 
@@ -127,9 +143,9 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 
 	@Override
 	public void updateEntity() {
-
+		
 		super.updateEntity();
-
+		
 		if (inProcess && arm != null) {
 
 			arm.speed = 0;
@@ -150,15 +166,9 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 
 			speed = arm.speed;
 		}
-	}
-
-	@Override
-	public void doWork() {
-
-		builderDone = bluePrintBuilder.done;
-
-		if (APIProxy.isClient(worldObj)) {
-			return;
+		
+		if (APIProxy.isServerSide()) {
+			sendNetworkUpdate();
 		}
 
 		if (inProcess || !isDigging) {
@@ -169,30 +179,16 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 
 		if (bluePrintBuilder != null) {
 
+			builderDone = bluePrintBuilder.done;
 			if (!builderDone) {
-				// configuration for building phase
-				powerProvider.configure(20, 25, 25, 25, MAX_ENERGY);
-
-				if (powerProvider.useEnergy(25, 25, true) != 25) {
-					return;
-				}
-
-				powerProvider.timeTracker.markTime(worldObj);
-
-				if (builder == null) {
-					builder = new EntityRobot(worldObj, box);
-					worldObj.spawnEntityInWorld(builder);
-				}
-
-				if (builder.readyToBuild()) {
-					builder.scheduleContruction(bluePrintBuilder.getNextBlock(worldObj, this), bluePrintBuilder.getContext());
-				}
-
+				
+				buildFrame();
 				return;
 
 			} else {
 
 				if (builder != null && builder.done()) {
+					
 					box.deleteLasers();
 					builder.setDead();
 					builder = null;
@@ -201,24 +197,57 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 		}
 
 		if (builder == null) {
-			// configuration for digging phase
-			powerProvider.configure(20, 30, 200, 50, MAX_ENERGY);
+			
+			dig();
+		}
+		
+		
+	}
 
-			if (!findTarget(true)) {
-				arm.setTarget(box.xMin + arm.sizeX / 2, yCoord + 2, box.zMin + arm.sizeX / 2);
-
-				isDigging = false;
-			}
-
-			inProcess = true;
+	@Override
+	public void doWork() {}
+	
+	protected void buildFrame() {
+		
+		powerProvider.configure(20, 25, 25, 25, MAX_ENERGY);
+		if (powerProvider.useEnergy(25, 25, true) != 25) {
+			return;
 		}
 
-		if (APIProxy.isServerSide()) {
-			sendNetworkUpdate();
+		powerProvider.timeTracker.markTime(worldObj);
+
+		if (builder == null) {
+			builder = new EntityRobot(worldObj, box);
+			worldObj.spawnEntityInWorld(builder);
 		}
+
+		if (builder.readyToBuild()) {
+			builder.scheduleContruction(bluePrintBuilder.getNextBlock(worldObj, this), bluePrintBuilder.getContext());
+		}
+	}
+	
+	protected void dig() {
+		
+		powerProvider.configure(20, 30, 200, 50, MAX_ENERGY);
+		if (powerProvider.useEnergy(30, 30, true) != 30) {
+			return;
+		}
+
+		if (!findTarget(true)) {
+			
+			arm.setTarget(box.xMin + arm.sizeX / 2, yCoord + 2, box.zMin + arm.sizeX / 2);
+
+			isDigging = false;
+		}
+
+		inProcess = true;
 	}
 
 	public boolean findTarget(boolean doSet) {
+		
+		if (APIProxy.isClient(worldObj))
+			return false;
+		
 		boolean[][] blockedColumns = new boolean[bluePrintBuilder.bluePrint.sizeX - 2][bluePrintBuilder.bluePrint.sizeZ - 2];
 
 		for (int searchX = 0; searchX < bluePrintBuilder.bluePrint.sizeX - 2; ++searchX) {
@@ -262,7 +291,7 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 						if (blockDig(blockId)) {
 							blockedColumns[searchX][searchZ] = true;
 						} else if (canDig(blockId)) {
-							if (doSet) {
+							if (doSet && arm != null) {
 								arm.setTarget(bx, by + 1, bz);
 
 								targetX = (int) arm.targetX;
@@ -314,12 +343,7 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 		targetZ = nbttagcompound.getInteger("targetZ");
 
 		if (nbttagcompound.getBoolean("hasArm")) {
-			NBTTagCompound armStore = nbttagcompound.getCompoundTag("arm");
-			arm = new EntityMechanicalArm(worldObj);
-			arm.readFromNBT(armStore);
-			arm.listener = this;
-
-			loadArm = true;
+			armStore = nbttagcompound.getCompoundTag("arm");
 		}
 
 	}
@@ -438,12 +462,15 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 	}
 
 	@Override
-	public void invalidate () {
-		destroy ();
+	public void invalidate() {
+		
+		super.invalidate();
+		destroy();
 	}
 
 	@Override
 	public void destroy() {
+		
 		if (arm != null) {
 			arm.setDead();
 		}
@@ -462,6 +489,7 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 	}
 
 	private void setBoundaries(boolean useDefault) {
+		
 		IAreaProvider a = null;
 
 		if (!useDefault) {
@@ -562,6 +590,7 @@ public class TileQuarry extends TileMachine implements IArmListener, IMachine, I
 
 	@Override
 	public void postPacketHandling(PacketUpdate packet) {
+		
 		super.postPacketHandling(packet);
 
 		createUtilsIfNeeded();

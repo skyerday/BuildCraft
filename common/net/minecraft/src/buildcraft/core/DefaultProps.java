@@ -11,7 +11,7 @@ package net.minecraft.src.buildcraft.core;
 
 public class DefaultProps {
 
-	public static final String VERSION = "3.x SVN r2";
+	public static final String VERSION = "@VERSION@";
 
 	public static int WORLD_HEIGHT = 256;
 	public static String NET_CHANNEL_NAME = "BC";
@@ -75,6 +75,10 @@ public class DefaultProps {
 
 	public static int PIPE_ITEMS_STRIPES_ID = 4071;
 	public static int PIPE_STRUCTURE_COBBLESTONE_ID = 4072;
+	public static int PIPE_ITEMS_VOID_ID = 19150;
+	public static int PIPE_LIQUIDS_VOID_ID = 19151;
+	public static int PIPE_ITEMS_SANDSTONE_ID = 19152;
+	public static int PIPE_LIQUIDS_SANDSTONE_ID = 19153;
 
 	public static int WOODEN_PIPE_ID = 145; // LEGACY
 	public static int STONE_PIPE_ID = 146; // LEGACY
@@ -107,6 +111,7 @@ public class DefaultProps {
 
 	public static boolean CURRENT_CONTINUOUS = false;
 	public static boolean PIPES_ALWAYS_CONNECT = false;
+	public static boolean FILLER_DESTROY = false;
 
 	public static int TRIGGER_REDSTONE_ACTIVE = 1;
 	public static int TRIGGER_REDSTONE_INACTIVE = 2;
